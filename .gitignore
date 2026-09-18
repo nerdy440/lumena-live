@@ -1,0 +1,32 @@
+# mobile/ has its own separate git repo (Expo-initialized) — not tracked
+# from here.
+mobile/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.test
+*.out
+/api
+/loadtest.exe
+/server.log
+/lumena-server.exe*
+
+# Env / secrets — never commit real credentials
+.env
+.env.local
+*.pem
+
+# Node / Expo / React Native
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.jsbundle
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

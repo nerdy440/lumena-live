@@ -1,0 +1,25 @@
+go 1.25.0
+
+use (
+	./admin
+	./analytics
+	./auth
+	./chat
+	./creator
+	./db
+	./feed
+	./fraud
+	./gateway
+	./ledger
+	./match
+	./moderation
+	./profile
+	./pv
+	./referral
+	./rollout
+	./shared
+	./tools/loadtest
+	./translate
+)
+
+use ./streaming

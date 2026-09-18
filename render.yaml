@@ -1,0 +1,19 @@
+# Render Blueprint — see https://render.com/docs/blueprint-spec
+# Connect this repo on Render and it reads this file automatically to
+# configure the web service. DATABASE_URL and JWT_SECRET are marked
+# sync: false so Render prompts you to paste them in in its dashboard
+# rather than storing real secrets in this file.
+services:
+  - type: web
+    name: lumena-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PORT
+        value: "8080"

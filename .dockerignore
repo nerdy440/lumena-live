@@ -1,0 +1,16 @@
+# Not needed to build feed/cmd/api — keeps the Docker build context small.
+mobile/
+frontend/
+backend/
+infra/
+docs/
+scripts/
+
+# Stray local build artifacts (binaries, logs) — never part of the build.
+*.exe
+*.exe~
+api
+server.log
+loadtest.exe
+
+.git/

@@ -1,0 +1,165 @@
+version: "3.9"
+
+# Lumena Live — local development stack
+# Run: docker-compose up -d
+# API will be at http://localhost:8080
+# Realtime gateway at ws://localhost:8081
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lumena
+      POSTGRES_USER: lumena
+      POSTGRES_PASSWORD: lumena_dev_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumena"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres_ledger:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lumena_ledger
+      POSTGRES_USER: lumena_ledger
+      POSTGRES_PASSWORD: lumena_ledger_dev_only
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_ledger_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumena_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "room-events:8:1,user-events:4:1,orders:4:1,moderation:4:1"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  minio:
+    # S3-compatible local storage for avatars, thumbnails, gifts, evidence
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: lumena_minio
+      MINIO_ROOT_PASSWORD: lumena_minio_dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: ../infra/docker/Dockerfile.api
+    environment:
+      LUMENA_ENV: development
+      DATABASE_URL: postgres://lumena:lumena_dev_only@postgres:5432/lumena?sslmode=disable
+      LEDGER_DATABASE_URL: postgres://lumena_ledger:lumena_ledger_dev_only@postgres_ledger:5432/lumena_ledger?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: lumena_minio
+      S3_SECRET_KEY: lumena_minio_dev
+      JWT_SECRET: dev-only-secret-never-use-in-production
+      TRANSLATION_PROVIDER: dev-mock   # DEV MOCK — switches to vendor in production
+      AGE_ASSURANCE_PROVIDER: dev-mock # DEV MOCK — switches to vendor in production
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: ../infra/docker/Dockerfile.gateway
+    environment:
+      LUMENA_ENV: development
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: dev-only-secret-never-use-in-production
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: ../infra/docker/Dockerfile.worker
+    environment:
+      LUMENA_ENV: development
+      DATABASE_URL: postgres://lumena:lumena_dev_only@postgres:5432/lumena?sslmode=disable
+      LEDGER_DATABASE_URL: postgres://lumena_ledger:lumena_ledger_dev_only@postgres_ledger:5432/lumena_ledger?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      # Reconciler interval — shorter in dev for fast iteration
+      RECONCILER_INTERVAL_S: "10"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  postgres_ledger_data:
+  redis_data:
+  minio_data:
