@@ -31,12 +31,45 @@ type PurchaseExpectation struct {
 	OrderID       string // matched against the store's client/order reference
 	PriceMinor    int64
 	PriceCurrency string
+	// SKU and AccountID are Google Play's anti-replay checks (see
+	// GooglePlayVerifier's doc comment for why Play Billing needs a
+	// different check than Stripe's amount/currency match): SKU is
+	// matched against the purchased product ID, AccountID against the
+	// obfuscatedExternalAccountId the client set when launching the
+	// purchase flow. Stripe/dev verifiers ignore both.
+	SKU       string
+	AccountID string
 }
 
 // Verifier confirms a purchase token with the platform store, and that the
 // store's own record of the purchase matches what this order expects.
 type Verifier interface {
 	Verify(ctx context.Context, platform, purchaseToken string, expected PurchaseExpectation) error
+}
+
+// MultiVerifier dispatches Verify to a different underlying Verifier per
+// platform value — the composition root's way of wiring dev + Stripe +
+// Google Play simultaneously instead of forcing one global choice (see
+// feed/cmd/api/main.go). An unrecognized platform is ErrInvalidToken
+// rather than a panic or silent success, since accepting an order for a
+// platform with no configured verifier would mean coins credited on
+// nothing but the client's say-so.
+type MultiVerifier struct {
+	byPlatform map[string]Verifier
+}
+
+func NewMultiVerifier(byPlatform map[string]Verifier) *MultiVerifier {
+	return &MultiVerifier{byPlatform: byPlatform}
+}
+
+var _ Verifier = (*MultiVerifier)(nil)
+
+func (v *MultiVerifier) Verify(ctx context.Context, platform, purchaseToken string, expected PurchaseExpectation) error {
+	verifier, ok := v.byPlatform[platform]
+	if !ok {
+		return ErrInvalidToken
+	}
+	return verifier.Verify(ctx, platform, purchaseToken, expected)
 }
 
 // DevVerifier is a deterministic stand-in for GooglePlayVerifier/
@@ -46,8 +79,8 @@ type Verifier interface {
 // exercise every path without a real store account:
 //   - "fail-*"    -> ErrInvalidToken, always
 //   - "pending-*" -> ErrPending for the first two calls, then succeeds
-//                    (simulates the store settling asynchronously, which is
-//                    exactly what the reconciler exists to ride out)
+//     (simulates the store settling asynchronously, which is
+//     exactly what the reconciler exists to ride out)
 //   - anything else -> succeeds immediately
 type DevVerifier struct {
 	mu       sync.Mutex

@@ -47,10 +47,13 @@ func scanOrder(row pgx.Row) (*ledger.Order, error) {
 	return &o, nil
 }
 
-func (r *OrderRepo) CreateOrder(ctx context.Context, accountID, sku string) (*ledger.Order, error) {
+func (r *OrderRepo) CreateOrder(ctx context.Context, accountID, sku, platform string) (*ledger.Order, error) {
 	product, ok := ledger.ProductBySKU(sku)
 	if !ok {
 		return nil, ledger.ErrUnknownSKU
+	}
+	if platform == "" {
+		platform = ledger.PlatformDevStore
 	}
 	var seq int64
 	if err := r.pool.QueryRow(ctx, `SELECT nextval('ledger_order_seq')`).Scan(&seq); err != nil {
@@ -59,9 +62,9 @@ func (r *OrderRepo) CreateOrder(ctx context.Context, accountID, sku string) (*le
 	id := "order-" + strconv.FormatInt(seq, 10)
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO ledger_orders (id, account_id, sku, coins, price_minor, price_currency, platform, status)
-		VALUES ($1, $2, $3, $4, $5, $6, 'dev_store', $7)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+orderCols,
-		id, accountID, sku, product.Coins, product.PriceMinor, product.PriceCurrency, string(ledger.OrderCreated))
+		id, accountID, sku, product.Coins, product.PriceMinor, product.PriceCurrency, platform, string(ledger.OrderCreated))
 	return scanOrder(row)
 }
 

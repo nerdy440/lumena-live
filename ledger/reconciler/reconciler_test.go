@@ -20,7 +20,7 @@ func TestReconciler_RecoversOrderStuckAtCrediting(t *testing.T) {
 	orders := ledger.NewMemOrderRepo()
 	svc := ordersvc.NewService(orders, l, store.NewDevVerifier())
 
-	order, err := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestReconciler_RetriesPendingOrderUntilStoreConfirms(t *testing.T) {
 	svc := ordersvc.NewService(orders, l, verifier)
 	worker := reconciler.New(svc, time.Hour, nil)
 
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 	first, err := svc.VerifyOrder(ctx, "alice", order.ID, "pending-token")
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestReconciler_DoesNotTouchTerminalOrders(t *testing.T) {
 	svc := ordersvc.NewService(orders, l, store.NewDevVerifier())
 	worker := reconciler.New(svc, time.Hour, nil)
 
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 	svc.VerifyOrder(ctx, "alice", order.ID, "fail-token") // -> failed
 
 	worker.RunOnce(ctx) // must not touch a terminal order

@@ -24,7 +24,7 @@ func newService() (*ordersvc.Service, *ledger.MemLedger) {
 
 func TestCreateOrder_UnknownSKURejected(t *testing.T) {
 	svc, _ := newService()
-	_, err := svc.CreateOrder(context.Background(), "alice", "does_not_exist", "k1")
+	_, err := svc.CreateOrder(context.Background(), "alice", "does_not_exist", "", "k1")
 	if !errors.Is(err, ledger.ErrUnknownSKU) {
 		t.Fatalf("expected ErrUnknownSKU, got %v", err)
 	}
@@ -33,11 +33,11 @@ func TestCreateOrder_UnknownSKURejected(t *testing.T) {
 func TestCreateOrder_IdempotentOnKey(t *testing.T) {
 	svc, _ := newService()
 	ctx := context.Background()
-	o1, err := svc.CreateOrder(ctx, "alice", "coins_100", "same-key")
+	o1, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "same-key")
 	if err != nil {
 		t.Fatal(err)
 	}
-	o2, err := svc.CreateOrder(ctx, "alice", "coins_100", "same-key")
+	o2, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "same-key")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCreateOrder_IdempotentOnKey(t *testing.T) {
 func TestVerifyOrder_HappyPath_CreditsCoinsExactlyOnce(t *testing.T) {
 	svc, l := newService()
 	ctx := context.Background()
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 
 	result, err := svc.VerifyOrder(ctx, "alice", order.ID, "token-abc")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestVerifyOrder_HappyPath_CreditsCoinsExactlyOnce(t *testing.T) {
 func TestVerifyOrder_InvalidTokenFailsOrder(t *testing.T) {
 	svc, _ := newService()
 	ctx := context.Background()
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 
 	_, err := svc.VerifyOrder(ctx, "alice", order.ID, "fail-bad-token")
 	if !errors.Is(err, store.ErrInvalidToken) {
@@ -99,7 +99,7 @@ func TestVerifyOrder_InvalidTokenFailsOrder(t *testing.T) {
 func TestVerifyOrder_PendingLeavesOrderVisibleNotSilent(t *testing.T) {
 	svc, l := newService()
 	ctx := context.Background()
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 
 	result, err := svc.VerifyOrder(ctx, "alice", order.ID, "pending-token")
 	if err != nil {
@@ -121,12 +121,12 @@ func TestVerifyOrder_TokenCannotBeReplayedToASecondAccount(t *testing.T) {
 	svc, l := newService()
 	ctx := context.Background()
 
-	orderA, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	orderA, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 	if _, err := svc.VerifyOrder(ctx, "alice", orderA.ID, "shared-token"); err != nil {
 		t.Fatalf("first use should succeed: %v", err)
 	}
 
-	orderB, _ := svc.CreateOrder(ctx, "bob", "coins_100", "k2")
+	orderB, _ := svc.CreateOrder(ctx, "bob", "coins_100", "", "k2")
 	_, err := svc.VerifyOrder(ctx, "bob", orderB.ID, "shared-token")
 	if !errors.Is(err, ledger.ErrTokenAlreadyUsed) {
 		t.Fatalf("expected ErrTokenAlreadyUsed for replay on a second account, got %v", err)
@@ -148,11 +148,11 @@ func TestCreateOrder_DailyCapBlocksExcessivePurchase(t *testing.T) {
 	limits.Set(ctx, &ledger.SpendLimits{AccountID: "alice", DailyCap: 150})
 
 	// First purchase (100 coins) fits under the 150 cap.
-	if _, err := svc.CreateOrder(ctx, "alice", "coins_100", "k1"); err != nil {
+	if _, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1"); err != nil {
 		t.Fatalf("expected first purchase within cap to succeed: %v", err)
 	}
 	// Second purchase would bring the daily total to 200, over the 150 cap.
-	_, err := svc.CreateOrder(ctx, "alice", "coins_100", "k2")
+	_, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "k2")
 	if !errors.Is(err, ledger.ErrSpendLimitExceeded) {
 		t.Fatalf("expected ErrSpendLimitExceeded, got %v", err)
 	}
@@ -169,7 +169,7 @@ func TestCreateOrder_CoolingOffBlocksAllPurchases(t *testing.T) {
 		AccountID: "alice", CoolingOff: true, CoolingOffUntil: timeNowPlus(24),
 	})
 
-	_, err := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	_, err := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 	if !errors.Is(err, ledger.ErrCoolingOff) {
 		t.Fatalf("expected ErrCoolingOff, got %v", err)
 	}
@@ -178,7 +178,7 @@ func TestCreateOrder_CoolingOffBlocksAllPurchases(t *testing.T) {
 func TestVerifyOrder_WrongAccountRejected(t *testing.T) {
 	svc, _ := newService()
 	ctx := context.Background()
-	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "k1")
+	order, _ := svc.CreateOrder(ctx, "alice", "coins_100", "", "k1")
 
 	_, err := svc.VerifyOrder(ctx, "mallory", order.ID, "token-x")
 	if !errors.Is(err, ledger.ErrOrderNotOwned) {

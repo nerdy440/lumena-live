@@ -81,9 +81,23 @@ var (
 	ErrOrderTerminal       = errors.New("ledger: order is already in a terminal state")
 )
 
+// Recognized values for Order.Platform / CreateOrder's platform argument.
+// An unrecognized or empty platform defaults to PlatformDevStore (see
+// CreateOrder implementations) so existing dev/test call sites that never
+// passed one keep working unchanged.
+const (
+	PlatformDevStore   = "dev_store"   // store.DevVerifier — never production
+	PlatformGooglePlay = "google_play" // store.GooglePlayVerifier — Android IAP
+	PlatformStripe     = "stripe"      // store.StripeVerifier — web checkout
+)
+
 // OrderRepo is the orders storage contract.
 type OrderRepo interface {
-	CreateOrder(ctx context.Context, accountID, sku string) (*Order, error)
+	// CreateOrder starts a purchase. platform records which store this
+	// order's purchase token will need to be verified against — see the
+	// Platform* constants above. An empty string defaults to
+	// PlatformDevStore.
+	CreateOrder(ctx context.Context, accountID, sku, platform string) (*Order, error)
 	GetOrder(ctx context.Context, id string) (*Order, error)
 	// FindByTokenHash returns the order that already consumed tokenHash, if
 	// any — the replay-prevention check (doc 06 §10's UNIQUE token_hash).

@@ -25,10 +25,13 @@ func NewMemOrderRepo() *MemOrderRepo {
 
 var _ OrderRepo = (*MemOrderRepo)(nil)
 
-func (r *MemOrderRepo) CreateOrder(_ context.Context, accountID, sku string) (*Order, error) {
+func (r *MemOrderRepo) CreateOrder(_ context.Context, accountID, sku, platform string) (*Order, error) {
 	product, ok := ProductBySKU(sku)
 	if !ok {
 		return nil, ErrUnknownSKU
+	}
+	if platform == "" {
+		platform = PlatformDevStore
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -42,7 +45,7 @@ func (r *MemOrderRepo) CreateOrder(_ context.Context, accountID, sku string) (*O
 		Coins:         product.Coins,
 		PriceMinor:    product.PriceMinor,
 		PriceCurrency: product.PriceCurrency,
-		Platform:      "dev_store",
+		Platform:      platform,
 		Status:        OrderCreated,
 		CreatedAt:     now,
 		UpdatedAt:     now,

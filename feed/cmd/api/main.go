@@ -397,18 +397,43 @@ func run(logger *slog.Logger) error {
 		orderRepo = ledger.NewMemOrderRepo()
 		spendLimitsRepo = ledger.NewMemSpendLimitsRepo()
 	}
-	// Real purchase verification requires a real Stripe account — wired in
-	// only when STRIPE_SECRET_KEY is actually set. Without it this falls
-	// back to DevVerifier, exactly as it always has; this is not a silent
-	// fake-prod switch, it's the same dev-only stand-in every other DevXxx
-	// in this codebase uses until its real vendor dependency is available.
-	var purchaseVerifier store.Verifier = store.NewDevVerifier()
-	if stripeKey := os.Getenv("STRIPE_SECRET_KEY"); stripeKey != "" {
-		purchaseVerifier = store.NewStripeVerifier(stripeKey)
-		slog.Info("purchase verification: using StripeVerifier (real Stripe API calls)")
-	} else {
-		slog.Warn("purchase verification: STRIPE_SECRET_KEY not set — using DevVerifier (NEVER for production)")
+	// Real purchase verification requires a real vendor account per
+	// platform — each is wired in only when its own env var is actually
+	// set, and every platform without one falls back to DevVerifier under
+	// that platform key, exactly as the single-verifier version always
+	// did. This is not a silent fake-prod switch, it's the same dev-only
+	// stand-in every other DevXxx in this codebase uses until its real
+	// vendor dependency is available. dev_store always maps to DevVerifier
+	// regardless — it's the client-selectable "definitely not a real
+	// store" platform, used by web/dev builds and tests.
+	//
+	// google_play is Play Store policy, not a preference: any digital
+	// good "consumed within the app" (coins/diamonds) must go through
+	// Google Play Billing on Android, not Stripe — see
+	// store.GooglePlayVerifier's doc comment.
+	verifiers := map[string]store.Verifier{
+		ledger.PlatformDevStore: store.NewDevVerifier(),
 	}
+	if stripeKey := os.Getenv("STRIPE_SECRET_KEY"); stripeKey != "" {
+		verifiers[ledger.PlatformStripe] = store.NewStripeVerifier(stripeKey)
+		slog.Info("purchase verification: stripe platform using StripeVerifier (real Stripe API calls)")
+	} else {
+		verifiers[ledger.PlatformStripe] = store.NewDevVerifier()
+		slog.Warn("purchase verification: STRIPE_SECRET_KEY not set — stripe platform using DevVerifier (NEVER for production)")
+	}
+	if saJSON := os.Getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"); saJSON != "" {
+		packageName := os.Getenv("GOOGLE_PLAY_PACKAGE_NAME")
+		gpv, err := store.NewGooglePlayVerifier([]byte(saJSON), packageName)
+		if err != nil {
+			return fmt.Errorf("parse GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: %w", err)
+		}
+		verifiers[ledger.PlatformGooglePlay] = gpv
+		slog.Info("purchase verification: google_play platform using GooglePlayVerifier (real Play Developer API calls)", "package", packageName)
+	} else {
+		verifiers[ledger.PlatformGooglePlay] = store.NewDevVerifier()
+		slog.Warn("purchase verification: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON not set — google_play platform using DevVerifier (NEVER for production; Play Store requires Play Billing for real releases)")
+	}
+	purchaseVerifier := store.NewMultiVerifier(verifiers)
 	orderService := ordersvc.NewService(orderRepo, ledgerRepo, purchaseVerifier).
 		WithSpendLimits(spendLimitsRepo)
 	giftH := ledgerHandlers.New(giftService, ledgerRepo).WithOrders(orderService, spendLimitsRepo)
@@ -1374,6 +1399,12 @@ func run(logger *slog.Logger) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"account_id_in_ctx": id, "has_account": id != ""})
 	})))
+
+	// Legal pages — required by Google Play Console's Data Safety / store
+	// listing, and linked from the mobile app's Settings screen (see
+	// legal.go's doc comment for the "draft, not legal advice" caveat).
+	mux.HandleFunc("GET /privacy-policy", servePrivacyPolicy)
+	mux.HandleFunc("GET /terms-of-service", serveTermsOfService)
 
 	// Web UI — serve the React app from the embedded HTML
 	mux.HandleFunc("/", serveWebUI)

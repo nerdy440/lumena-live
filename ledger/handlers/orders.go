@@ -27,12 +27,16 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		SKU string `json:"sku"`
+		// Platform tells the server which store this purchase will go
+		// through, so VerifyOrder later routes to the matching Verifier —
+		// see ledger.Platform* constants. Empty defaults to the dev store.
+		Platform string `json:"platform"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SKU == "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "sku is required.")
 		return
 	}
-	order, err := h.orders.CreateOrder(r.Context(), accountID, req.SKU, idempotencyKey)
+	order, err := h.orders.CreateOrder(r.Context(), accountID, req.SKU, req.Platform, idempotencyKey)
 	if err != nil {
 		h.writeOrderError(w, err)
 		return

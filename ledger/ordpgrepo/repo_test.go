@@ -37,7 +37,7 @@ func TestOrder_CreateGetAndUnknownSKU(t *testing.T) {
 	orders, _ := newTestRepos(t)
 	ctx := context.Background()
 
-	o, err := orders.CreateOrder(ctx, "acc-1", "coins_500")
+	o, err := orders.CreateOrder(ctx, "acc-1", "coins_500", "")
 	if err != nil || o.ID == "" || o.Coins != 500 || o.Status != ledger.OrderCreated {
 		t.Fatalf("create order: %+v err=%v", o, err)
 	}
@@ -47,7 +47,7 @@ func TestOrder_CreateGetAndUnknownSKU(t *testing.T) {
 		t.Fatalf("get order: %+v err=%v", got, err)
 	}
 
-	if _, err := orders.CreateOrder(ctx, "acc-1", "not-a-real-sku"); err != ledger.ErrUnknownSKU {
+	if _, err := orders.CreateOrder(ctx, "acc-1", "not-a-real-sku", ""); err != ledger.ErrUnknownSKU {
 		t.Fatalf("expected ErrUnknownSKU, got %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestOrder_CreateGetAndUnknownSKU(t *testing.T) {
 func TestOrder_UpdateOrderAndFindByTokenHash(t *testing.T) {
 	orders, _ := newTestRepos(t)
 	ctx := context.Background()
-	o, _ := orders.CreateOrder(ctx, "acc-2", "coins_100")
+	o, _ := orders.CreateOrder(ctx, "acc-2", "coins_100", "")
 
 	noToken, err := orders.FindByTokenHash(ctx, "hash-abc")
 	if err != nil || noToken != nil {
@@ -86,9 +86,9 @@ func TestOrder_UpdateOrderAndFindByTokenHash(t *testing.T) {
 func TestOrder_ListOrdersAndListNonTerminal(t *testing.T) {
 	orders, _ := newTestRepos(t)
 	ctx := context.Background()
-	o1, _ := orders.CreateOrder(ctx, "acc-3", "coins_100")
-	o2, _ := orders.CreateOrder(ctx, "acc-3", "coins_500")
-	_, _ = orders.CreateOrder(ctx, "acc-4", "coins_100")
+	o1, _ := orders.CreateOrder(ctx, "acc-3", "coins_100", "")
+	o2, _ := orders.CreateOrder(ctx, "acc-3", "coins_500", "")
+	_, _ = orders.CreateOrder(ctx, "acc-4", "coins_100", "")
 
 	o1.Status = ledger.OrderPendingPayment
 	_ = orders.UpdateOrder(ctx, o1)

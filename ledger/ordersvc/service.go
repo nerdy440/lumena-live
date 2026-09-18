@@ -52,8 +52,11 @@ func (s *Service) WithSpendLimits(limits ledger.SpendLimitsRepo) *Service {
 }
 
 // CreateOrder starts a purchase for sku, idempotent on idempotencyKey (doc
-// 07 §6: "POST /orders — Idempotent").
-func (s *Service) CreateOrder(ctx context.Context, accountID, sku, idempotencyKey string) (*ledger.Order, error) {
+// 07 §6: "POST /orders — Idempotent"). platform records which store
+// (Google Play, Stripe, dev) this order's purchase token will need to be
+// verified against — see ledger.Platform* constants; an empty string
+// defaults to ledger.PlatformDevStore.
+func (s *Service) CreateOrder(ctx context.Context, accountID, sku, platform, idempotencyKey string) (*ledger.Order, error) {
 	s.mu.Lock()
 	if existing, ok := s.createByKey[idempotencyKey]; ok {
 		s.mu.Unlock()
@@ -69,7 +72,7 @@ func (s *Service) CreateOrder(ctx context.Context, accountID, sku, idempotencyKe
 		return nil, err
 	}
 
-	order, err := s.orders.CreateOrder(ctx, accountID, sku)
+	order, err := s.orders.CreateOrder(ctx, accountID, sku, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +214,8 @@ func (s *Service) advance(ctx context.Context, order *ledger.Order, purchaseToke
 			OrderID:       order.ID,
 			PriceMinor:    order.PriceMinor,
 			PriceCurrency: order.PriceCurrency,
+			SKU:           order.SKU,
+			AccountID:     order.AccountID,
 		})
 		switch {
 		case errors.Is(err, store.ErrPending):
