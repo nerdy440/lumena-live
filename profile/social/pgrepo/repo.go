@@ -159,6 +159,47 @@ func (r *Repo) listFollowEdge(ctx context.Context, fixedCol, listedCol, accountI
 	return entries, nextCursor, nil
 }
 
+// GetBlocked returns accounts that accountID has blocked. Note this joins
+// against blocks (not follows) unlike listFollowEdge — the blocked
+// account may not even have a profile row deleted-account edge cases
+// aside, so this uses its own query rather than trying to force-fit
+// listFollowEdge's follows-table-shaped helper.
+func (r *Repo) GetBlocked(ctx context.Context, accountID string, cursor string, limit int) ([]social.BlockEntry, string, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT b.blocked_id, p.display_name, p.avatar_url, b.created_at
+		FROM blocks b
+		JOIN profiles p ON p.account_id = b.blocked_id
+		WHERE b.blocker_id = $1 AND ($2 = '' OR b.blocked_id > $2)
+		ORDER BY b.blocked_id
+		LIMIT $3`, accountID, cursor, limit+1)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+
+	var entries []social.BlockEntry
+	for rows.Next() {
+		var e social.BlockEntry
+		if err := rows.Scan(&e.AccountID, &e.DisplayName, &e.AvatarURL, &e.BlockedAt); err != nil {
+			return nil, "", err
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(entries) > limit {
+		entries = entries[:limit]
+		nextCursor = entries[limit-1].AccountID
+	}
+	return entries, nextCursor, nil
+}
+
 func (r *Repo) IsBlockedEitherWay(ctx context.Context, a, b string) (bool, error) {
 	var blocked bool
 	err := r.pool.QueryRow(ctx, `

@@ -1201,6 +1201,7 @@ func run(logger *slog.Logger) error {
 	mux.Handle("GET /api/v1/users/{id}/followers", optAuth(profileH.GetFollowers))
 	mux.Handle("POST /api/v1/follows", mustAuth(profileH.Follow))
 	mux.Handle("DELETE /api/v1/follows/{followee_id}", mustAuth(profileH.Unfollow))
+	mux.Handle("GET /api/v1/me/blocked", mustAuth(profileH.GetBlocked))
 	mux.Handle("POST /api/v1/blocks", mustAuth(profileH.Block))
 	mux.Handle("DELETE /api/v1/blocks/{id}", mustAuth(profileH.Unblock))
 

@@ -156,3 +156,41 @@ func TestGetFollowing_And_GetFollowers_Pagination(t *testing.T) {
 		t.Fatalf("unexpected followers of bob: %+v", followers)
 	}
 }
+
+func TestGetBlocked_ListsOnlyOwnBlocksAndPaginates(t *testing.T) {
+	r, pr := newTestRepo(t)
+	ctx := context.Background()
+	seedProfiles(t, pr, "alice", "bob", "x1", "x2", "x3")
+
+	for _, id := range []string{"x1", "x2", "x3"} {
+		if _, err := r.Block(ctx, "alice", id); err != nil {
+			t.Fatalf("block %s: %v", id, err)
+		}
+	}
+	if _, err := r.Block(ctx, "bob", "x1"); err != nil {
+		t.Fatalf("bob block: %v", err)
+	}
+
+	page1, cursor, err := r.GetBlocked(ctx, "alice", "", 2)
+	if err != nil {
+		t.Fatalf("GetBlocked page1: %v", err)
+	}
+	if len(page1) != 2 || cursor == "" {
+		t.Fatalf("expected 2 items + cursor, got %d items cursor=%q", len(page1), cursor)
+	}
+	page2, cursor2, err := r.GetBlocked(ctx, "alice", cursor, 2)
+	if err != nil {
+		t.Fatalf("GetBlocked page2: %v", err)
+	}
+	if len(page2) != 1 || cursor2 != "" {
+		t.Fatalf("expected final page of 1 with no cursor, got %d items cursor=%q", len(page2), cursor2)
+	}
+
+	bobList, _, err := r.GetBlocked(ctx, "bob", "", 10)
+	if err != nil {
+		t.Fatalf("bob's GetBlocked: %v", err)
+	}
+	if len(bobList) != 1 || bobList[0].AccountID != "x1" {
+		t.Fatalf("bob's block list should only contain x1, got %+v", bobList)
+	}
+}

@@ -356,3 +356,49 @@ func TestGetFollowing_Pagination(t *testing.T) {
 		t.Errorf("expected 5 unique accounts, got %d", len(seen))
 	}
 }
+
+func TestGetBlocked_ListsOnlyOwnBlocksAndPaginates(t *testing.T) {
+	r := social.NewMemSocialRepo()
+	ctx := context.Background()
+
+	for _, id := range []string{"x1", "x2", "x3"} {
+		r.RegisterDisplayName(id, "User "+id)
+		if _, err := r.Block(ctx, "alice", id); err != nil {
+			t.Fatalf("block %s: %v", id, err)
+		}
+	}
+	// A block by someone else must never show up in alice's list.
+	if _, err := r.Block(ctx, "bob", "x1"); err != nil {
+		t.Fatalf("bob block: %v", err)
+	}
+
+	page1, cursor, err := r.GetBlocked(ctx, "alice", "", 2)
+	if err != nil {
+		t.Fatalf("page 1: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Errorf("page 1: expected 2 items, got %d", len(page1))
+	}
+	if cursor == "" {
+		t.Error("page 1: expected a next cursor")
+	}
+
+	page2, cursor2, err := r.GetBlocked(ctx, "alice", cursor, 2)
+	if err != nil {
+		t.Fatalf("page 2: %v", err)
+	}
+	if len(page2) != 1 {
+		t.Errorf("page 2: expected 1 item, got %d", len(page2))
+	}
+	if cursor2 != "" {
+		t.Error("page 2: expected no next cursor (end of list)")
+	}
+
+	bobList, _, err := r.GetBlocked(ctx, "bob", "", 10)
+	if err != nil {
+		t.Fatalf("bob list: %v", err)
+	}
+	if len(bobList) != 1 || bobList[0].AccountID != "x1" {
+		t.Errorf("bob's block list should only contain x1, got %+v", bobList)
+	}
+}

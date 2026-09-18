@@ -172,6 +172,11 @@ func (s *Service) GetFollowers(ctx context.Context, accountID, cursor string, li
 	return s.socialRepo.GetFollowers(ctx, accountID, cursor, limit)
 }
 
+// GetBlocked returns the accounts that accountID has blocked.
+func (s *Service) GetBlocked(ctx context.Context, accountID, cursor string, limit int) ([]social.BlockEntry, string, error) {
+	return s.socialRepo.GetBlocked(ctx, accountID, cursor, limit)
+}
+
 // GetRelationship returns the full relationship between two accounts.
 func (s *Service) GetRelationship(ctx context.Context, viewerID, subjectID string) (*social.Relationship, error) {
 	return s.socialRepo.GetRelationship(ctx, viewerID, subjectID)

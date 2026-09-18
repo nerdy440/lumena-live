@@ -40,6 +40,14 @@ type FollowEntry struct {
 	FollowedAt  time.Time `json:"followed_at"`
 }
 
+// BlockEntry is one item in a blocked-accounts list.
+type BlockEntry struct {
+	AccountID   string    `json:"account_id"`
+	DisplayName string    `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
+	BlockedAt   time.Time `json:"blocked_at"`
+}
+
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
 var (
@@ -86,6 +94,9 @@ type Repo interface {
 
 	// IsBlockedEitherWay returns true if either party has blocked the other.
 	IsBlockedEitherWay(ctx context.Context, a, b string) (bool, error)
+
+	// GetBlocked returns accounts that accountID has blocked.
+	GetBlocked(ctx context.Context, accountID string, cursor string, limit int) ([]BlockEntry, string, error)
 }
 
 // ─── In-memory implementation ─────────────────────────────────────────────────
@@ -391,6 +402,70 @@ func (r *MemSocialRepo) IsBlockedEitherWay(_ context.Context, a, b string) (bool
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.isBlocked(a, b) || r.isBlocked(b, a), nil
+}
+
+// GetBlocked returns accounts that accountID has blocked, most recent first
+// — same cursor/ordering convention as GetFollowing/GetFollowers.
+func (r *MemSocialRepo) GetBlocked(_ context.Context, accountID string, cursor string, limit int) ([]BlockEntry, string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	type item struct {
+		blockedID string
+		at        time.Time
+	}
+	var items []item
+	for k, t := range r.blocks {
+		if k.blocker == accountID {
+			items = append(items, item{k.blocked, t})
+		}
+	}
+	for i := 0; i < len(items)-1; i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[i].at.Before(items[j].at) ||
+				(items[i].at.Equal(items[j].at) && items[i].blockedID > items[j].blockedID) {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+
+	start := 0
+	if cursor != "" {
+		for i, item := range items {
+			if item.blockedID == cursor {
+				start = i + 1
+				break
+			}
+		}
+	}
+	items = items[start:]
+
+	var entries []BlockEntry
+	for _, item := range items {
+		name := r.displayNames[item.blockedID]
+		if name == "" {
+			name = item.blockedID
+		}
+		entries = append(entries, BlockEntry{
+			AccountID:   item.blockedID,
+			DisplayName: name,
+			BlockedAt:   item.at,
+		})
+		if len(entries) >= limit+1 {
+			break
+		}
+	}
+
+	var nextCursor string
+	if len(entries) > limit {
+		nextCursor = entries[limit-1].AccountID
+		entries = entries[:limit]
+	}
+	return entries, nextCursor, nil
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

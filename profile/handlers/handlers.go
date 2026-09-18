@@ -244,6 +244,24 @@ func (h *Handler) GetFollowers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /me/blocked
+func (h *Handler) GetBlocked(w http.ResponseWriter, r *http.Request) {
+	accountID := AccountIDFromCtx(r.Context())
+	cursor := r.URL.Query().Get("cursor")
+	limit := queryInt(r, "limit", 50)
+
+	entries, nextCursor, err := h.svc.GetBlocked(r.Context(), accountID, cursor, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Could not load blocked accounts.")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":       entries,
+		"next_cursor": nextCursor,
+	})
+}
+
 // POST /blocks
 func (h *Handler) Block(w http.ResponseWriter, r *http.Request) {
 	blockerID := AccountIDFromCtx(r.Context())
