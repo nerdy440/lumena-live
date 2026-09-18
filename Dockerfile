@@ -14,8 +14,8 @@ WORKDIR /src
 # go.sum already covers that), so we copy everything in one shot.
 COPY . .
 
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,id=s/68abaa2b-a607-4772-8378-51e357b02cf8-/root/.cache/go-build,target=/root/.cache/go-build \
+    --mount=type=cache,id=s/68abaa2b-a607-4772-8378-51e357b02cf8-/go/pkg/mod,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux go build -o /out/lumena-api ./feed/cmd/api
 
 FROM alpine:3.20
